@@ -15,8 +15,6 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
-# .env 파일에서 환경 변수 로드
-load_dotenv()
 
 app = FastAPI()
 
@@ -121,4 +119,5 @@ async def generate_questions_from_pdf(file: UploadFile = File(...)):
     return {
         "message": f"총 {len(split_docs)}개의 조각 중 {len(docs_to_process)}개에 대한 질문 생성이 완료되었습니다.",
         "questions": generated_questions
+
     }
