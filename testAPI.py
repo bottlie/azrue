@@ -15,6 +15,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
+os.getenv("GOOGLE_API_KEY")
 
 app = FastAPI()
 
@@ -121,3 +122,4 @@ async def generate_questions_from_pdf(file: UploadFile = File(...)):
         "questions": generated_questions
 
     }
+
