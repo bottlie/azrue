@@ -168,9 +168,8 @@
             questionList.innerHTML = '';
 
             try {
-                // FastAPI 서버의 주소를 정확하게 입력해야 합니다.
-                // FastAPI가 8000번 포트에서 실행 중이라고 가정합니다.
-                const response = await fetch('http://127.0.0.1:8000/generate-questions-from-pdf/', {
+                // 백엔드 요청 URL을 상대 경로로 변경
+                const response = await fetch('/generate-questions-from-pdf/', {
                     method: 'POST',
                     body: formData,
                 });
