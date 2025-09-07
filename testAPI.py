@@ -1,34 +1,30 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-# --- 추가된 라이브러리 ---
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-# -------------------------
 import os
 import uuid
 from dotenv import load_dotenv
 
-# --- Google Gemini 라이브러리를 사용하도록 변경 ---
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
-os.getenv("GOOGLE_API_KEY")
+# .env 파일에서 환경 변수 로드
+load_dotenv()
 
 app = FastAPI()
 
-# --- 🔽 [추가된 코드 시작] 🔽 ---
-# 사용자가 웹사이트의 루트 주소('/')로 접속했을 때
-# 'static' 폴더에 있는 'index.html' 파일을 응답으로 보내줍니다.
-# 이렇게 하면 프론트엔드와 백엔드가 하나의 주소에서 함께 동작할 수 있습니다.
+# static 폴더를 정적 파일로 서빙
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 @app.get("/", include_in_schema=False)
 async def read_index():
     return FileResponse(os.path.join("static", "index.html"))
-# --- 🔼 [추가된 코드 끝] 🔼 ---
 
-
+# CORS 설정
 origins = [
     "http://localhost",
     "http://localhost:8080",
@@ -50,22 +46,24 @@ UPLOAD_DIRECTORY = "/tmp/pdf_uploads"
 if not os.path.exists(UPLOAD_DIRECTORY):
     os.makedirs(UPLOAD_DIRECTORY)
 
-# --- OpenAI 대신 Google Gemini 모델을 사용하도록 변경 ---
-try:
-    # Google API 키가 있는지 확인
-    if not os.getenv("GOOGLE_API_KEY"):
-        raise ValueError("GOOGLE_API_KEY 환경 변수가 설정되지 않았습니다. .env 파일을 확인하세요.")
+# 전역 변수 초기화
+embeddings = None
+llm = None
 
-    # Google Gemini 임베딩 모델과 LLM 초기화
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro-latest", temperature=0, convert_system_message_to_human=True)
-
-except Exception as e:
-    print(f"Google Gemini 모델을 초기화할 수 없습니다. API 키를 확인하세요. 오류: {e}")
-    embeddings = None
-    llm = None
-# ----------------------------------------------------
-
+# 서버 시작 시 모델 초기화
+@app.on_event("startup")
+def startup_event():
+    global embeddings, llm
+    try:
+        if not os.getenv("GOOGLE_API_KEY"):
+            raise ValueError("GOOGLE_API_KEY 환경 변수가 설정되지 않았습니다.")
+        
+        embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+        llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro-latest", temperature=0, convert_system_message_to_human=True)
+    except Exception as e:
+        print(f"Google Gemini 모델 초기화 실패. 서버가 시작되지 않습니다. 오류: {e}")
+        # 실제 운영 환경에서는 서버를 종료하는 로직을 추가할 수 있습니다.
+        # import sys; sys.exit(1)
 
 QUESTION_PROMPT_TEMPLATE = """
 당신은 주어진 컨텍스트를 분석하여 핵심적인 질문을 생성하는 AI 어시스턴트입니다.
@@ -79,13 +77,11 @@ QUESTION_PROMPT_TEMPLATE = """
 생성된 질문:
 """
 
-
 @app.post("/generate-questions-from-pdf/")
 async def generate_questions_from_pdf(file: UploadFile = File(...)):
-    # --- Google Gemini 서비스 준비 상태를 확인하도록 변경 ---
     if not llm or not embeddings:
         raise HTTPException(status_code=503, detail="Google Gemini 서비스가 준비되지 않았습니다. 서버 로그나 API 키를 확인하세요.")
-
+    
     unique_id = uuid.uuid4().hex
     file_path = os.path.join(UPLOAD_DIRECTORY, f"{unique_id}_{file.filename}")
 
@@ -100,7 +96,7 @@ async def generate_questions_from_pdf(file: UploadFile = File(...)):
 
         if not split_docs:
             raise HTTPException(status_code=400, detail="PDF에서 텍스트를 추출할 수 없거나 내용이 없습니다.")
-
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF 파일 처리 중 오류 발생: {e}")
     finally:
@@ -120,6 +116,4 @@ async def generate_questions_from_pdf(file: UploadFile = File(...)):
     return {
         "message": f"총 {len(split_docs)}개의 조각 중 {len(docs_to_process)}개에 대한 질문 생성이 완료되었습니다.",
         "questions": generated_questions
-
     }
-
